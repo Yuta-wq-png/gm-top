@@ -1,0 +1,47 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin · Card Market</title><link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/style.css"></head>
+<body><main id="m"></main>
+<script>
+const m=document.getElementById('m');
+const e=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ar=n=>n.toLocaleString('fr-FR')+' Ar';
+const api=async(a,d={})=>{const r=await fetch('/api',{method:'POST',headers:{'Content-Type':'application/json','x-pass':sessionStorage.pw||''},body:JSON.stringify({a,...d})});const j=await r.json();if(j.error)throw Error(j.error);return j};
+const S={games:['Jeux',{name:['Nom','t'],img:['URL image','t']}],
+cats:['Catégories',{game_id:['Jeu','g'],name:['Nom','t'],img:['URL image','t']}],
+items:['Tarifs',{game_id:['Jeu','g'],cat_id:['Catégorie','k'],name:['Nom','t'],img:['URL image','t'],price:['Prix (Ar)','n'],discount:['Réduction %','n'],soldout:['Épuisé','c'],hot:['Hot','c']}],
+pays:['Paiements',{name:['Opérateur','t'],logo:['URL logo','t'],receiver:['Nom du receveur','t'],number:['Numéro','t'],ussd:['Code USSD','t']}],
+posts:['Blog',{title:['Titre','t'],img:['URL image','t'],body:['Texte','a']}],orders:['Commandes'],chats:['Chats']};
+let s='orders',ed={},D={};
+function login(){m.innerHTML='<h1>Admin</h1><form class="box" id="l" style="max-width:360px"><label>Mot de passe</label><input type="password" id="p" required><button>Se connecter</button></form>';
+ l.onsubmit=async x=>{x.preventDefault();sessionStorage.pw=p.value;try{(await api('login')).ok?show('orders'):alert('Mot de passe incorrect')}catch(z){alert(z.message)}}}
+const bar=()=>'<div class="row" style="margin-bottom:20px"><b style="color:var(--a)">Admin</b>'+Object.entries(S).map(([k,v])=>`<button class="${k==s?'':'g'}" onclick="show('${k}')">${v[0]}</button>`).join('')+'<a class="btn g" href="/accueil">Voir le site</a><button class="g" onclick="sessionStorage.pw=\'\';login()">Quitter</button></div>';
+async function show(t){s=t;ed={};try{
+ if(t==='orders')return orders();if(t==='chats')return chats();
+ D=await api('catalog');crud();}catch(x){alert(x.message);login()}}
+function crud(){
+ const F=S[s][1],nm=(l,id)=>(D[l].find(x=>x.id===id)||{}).name||id;
+ const opt=(k,v)=>(k==='g'?D.games.map(x=>[x.id,x.name]):D.cats.map(c=>[c.id,nm('games',c.game_id)+' / '+c.name])).map(([i,n])=>`<option value="${i}" ${i===v?'selected':''}>${e(n)}</option>`).join('');
+ m.innerHTML=bar()+`<form class="box" id="f"><h2 style="margin-top:0">${ed.id?'Modifier':'Ajouter'} · ${S[s][0]}</h2><div class="two">`+Object.entries(F).map(([k,[lb,ty]])=>{const v=ed[k]??'';return `<div><label>${lb}</label>`+
+ (ty==='c'?`<br><input type="checkbox" name="${k}" ${v?'checked':''} style="width:auto">`:ty==='a'?`<textarea name="${k}" rows="7">${e(v)}</textarea>`:ty==='g'||ty==='k'?`<select name="${k}">${opt(ty,v)}</select>`:`<input name="${k}" type="${ty==='n'?'number':'text'}" value="${e(v)}">`)+'</div>'}).join('')+
+ `</div><button>Enregistrer</button> ${ed.id?'<button type="button" class="g" onclick="ed={};crud()">Annuler</button>':''}</form><div class="box" style="overflow-x:auto"><table>`+
+ D[s].slice().reverse().map(x=>'<tr>'+Object.entries(F).map(([k,[,ty]])=>`<td>${k==='img'||k==='logo'?(x[k]?`<img class="thumb" src="${e(x[k])}" alt="">`:''):ty==='c'?(x[k]?'✓':''):ty==='g'?e(nm('games',x[k])):ty==='k'?e(nm('cats',x[k])):e(String(x[k]??'').slice(0,40))}</td>`).join('')+`<td class="row"><button class="g" onclick="edit('${x.id}')">Modifier</button><button class="g" onclick="del('${x.id}')">Suppr.</button></td></tr>`).join('')+'</table></div>';
+ f.onsubmit=async x=>{x.preventDefault();const row={...ed};for(const[k,[,ty]]of Object.entries(F))row[k]=ty==='c'?f[k].checked:ty==='n'?+f[k].value:f[k].value;await api('save',{t:s,row});show(s)};
+}
+function edit(id){ed=D[s].find(x=>x.id===id);crud();scrollTo(0,0)}
+async function del(id){if(confirm('Supprimer ?')){await api('del',{t:s,id});show(s)}}
+async function orders(){
+ const o=await api('orders');
+ m.innerHTML=bar()+'<div class="box" style="overflow-x:auto"><table>'+(o.map(x=>`<tr><td>#${x.id.slice(-5)}<br><small>${new Date(x.created).toLocaleString('fr-FR')}</small><br><span class="st ${x.status}">${x.status}</span></td><td><b>${e(x.items)}</b><br>ID : <b>${e(x.gid)}</b> · Pseudo : <b>${e(x.pseudo)}</b><br>${e(x.pay)} · ${e(x.phone)} · ${e(x.email)}<br>Msg : ${e(x.msg)}</td><td>${ar(x.total)}</td><td id="s${x.id}">${x.shot?`<button class="g" onclick="shot('${x.id}','${x.shot}')">Voir capture</button>`:''}</td><td class="row"><button onclick="st('${x.id}','livre')">Livré</button><button class="g" onclick="st('${x.id}','refuse')">Refuser</button><button class="g" onclick="st('${x.id}','pending')">Attente</button><button class="g" onclick="delo('${x.id}')">Suppr.</button></td></tr>`).join('')||'<tr><td>Aucune commande.</td></tr>')+'</table></div>';
+}
+async function shot(oid,id){const r=await api('shot',{id});document.getElementById('s'+oid).innerHTML=`<a href="${r.img}" target="_blank"><img src="${r.img}" style="height:110px;border-radius:6px" alt=""></a>`}
+async function st(id,status){await api('status',{id,status});orders()}
+async function delo(id){if(confirm('Supprimer ?')){await api('delorder',{id});orders()}}
+async function chats(sidv){
+ const c=await api('chats'),g={};c.slice().reverse().forEach(x=>(g[x.sid]=g[x.sid]||[]).push(x));
+ let h=bar();
+ if(sidv)h+='<div class="box">'+g[sidv].map(x=>`<div class="msg ${x.admin?'a':''}">${e(x.msg)}</div>`).join('')+`<form id="r" class="row"><input id="rm" required placeholder="Réponse" style="flex:1;margin:0"><button>Répondre</button></form></div>`;
+ m.innerHTML=h+'<div class="box"><table>'+(Object.entries(g).map(([k,v])=>`<tr><td><button class="g" onclick="chats('${k}')">Client ${k.slice(0,6)}</button></td><td>${v.length} messages</td></tr>`).join('')||'<tr><td>Aucun message.</td></tr>')+'</table></div>';
+ if(sidv)r.onsubmit=async x=>{x.preventDefault();await api('reply',{sid:sidv,msg:rm.value});chats(sidv)};
+}
+sessionStorage.pw?show('orders'):login();
+</script></body></html>
