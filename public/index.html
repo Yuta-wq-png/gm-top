@@ -1,0 +1,75 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Card Market</title><link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/style.css"></head>
+<body><nav><b>Card Market</b><a href="/accueil">Accueil</a><a href="/blog">Blog</a><a href="/chats">Chats</a><a href="/historique">Historique</a><a class="btn" href="/panier" id="cn">Panier</a></nav><main></main>
+<script>
+const M=document.querySelector('main');
+const e=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ar=n=>n.toLocaleString('fr-FR')+' Ar';
+const pr=i=>Math.round(i.price*(100-(i.discount||0))/100);
+const sid=localStorage.sid||(localStorage.sid=Math.random().toString(36).slice(2)+Date.now().toString(36));
+const cart=()=>JSON.parse(localStorage.cart||'{}');
+const setCart=c=>{localStorage.cart=JSON.stringify(c);nav()};
+const api=async(a,d={})=>{const r=await fetch('/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({a,sid,...d})});const j=await r.json();if(j.error)throw Error(j.error);return j};
+const shrink=f=>new Promise(ok=>{const i=new Image();i.onload=()=>{const s=Math.min(1,700/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*s;c.height=i.height*s;c.getContext('2d').drawImage(i,0,0,c.width,c.height);ok(c.toDataURL('image/jpeg',.6))};i.src=URL.createObjectURL(f)});
+let CAT,co={};
+const go=u=>{history.pushState(0,'',u);nav()};
+document.addEventListener('click',x=>{const a=x.target.closest('a[href^="/"]');if(a&&!a.target){x.preventDefault();go(a.getAttribute('href'))}});
+addEventListener('popstate',()=>nav());
+const lines=()=>{let t=0;const L=Object.entries(cart()).map(([id,n])=>{const i=CAT.items.find(x=>x.id===id);if(!i||i.soldout)return;t+=pr(i)*n;return{...i,n,g:(CAT.games.find(g=>g.id===i.game_id)||{}).name}}).filter(Boolean);return[L,t]};
+
+async function nav(){
+ const u=location.pathname.split('/').filter(Boolean),r=u[0]||'accueil',id=u[1];
+ M.innerHTML='<p class="sub">Chargement…</p>';
+ try{
+  CAT=CAT||await api('catalog');
+  document.getElementById('cn').textContent='Panier ('+Object.values(cart()).reduce((a,b)=>a+b,0)+')';
+  const V={accueil,jeu,panier,paiement,historique,blog,chats}[r]||accueil;await V(id);
+ }catch(x){M.innerHTML='<p class="sub">Erreur : '+e(x.message)+'</p>'}
+}
+function accueil(){
+ M.innerHTML='<h1>Recharge tes jeux,<br>paye en Mobile Money.</h1><p class="sub">Diamants, UC et cartes de jeux livrés à Madagascar. Choisis ton jeu pour voir les tarifs.</p><h2>Jeux</h2><div class="grid">'+
+ CAT.games.map(g=>`<a class="card" href="/jeu/${g.id}"><img src="${e(g.img)}" alt=""><div class="t"><b>${e(g.name)}</b></div></a>`).join('')+'</div>';
+}
+function jeu(id){
+ const g=CAT.games.find(x=>x.id===id);if(!g)return go('/accueil');
+ const c=new URLSearchParams(location.search).get('c')||'';
+ const it=CAT.items.filter(i=>i.game_id===id&&(!c||i.cat_id===c)).sort((a,b)=>(b.hot?1:0)-(a.hot?1:0)||a.price-b.price);
+ M.innerHTML=`<h1>${e(g.name)}</h1><div class="tabs"><a class="${c?'':'on'}" href="/jeu/${id}">Tout</a>`+CAT.cats.filter(k=>k.game_id===id).map(k=>`<a class="${c===k.id?'on':''}" href="/jeu/${id}?c=${k.id}">${e(k.name)}</a>`).join('')+'</div><div class="grid">'+
+ it.map(i=>`<div class="card"><img src="${e(i.img)}" alt="">${i.hot?'<span class="tag">HOT</span>':''}${+i.discount?`<span class="tag d">-${i.discount}%</span>`:''}${i.soldout?'<span class="tag s">Épuisé</span>':''}<div class="t"><b>${e(i.name)}</b><div><span class="price">${ar(pr(i))}</span>${+i.discount?`<span class="old">${ar(i.price)}</span>`:''}</div><button ${i.soldout?'disabled':''} onclick="add('${i.id}')">Ajouter au panier</button></div></div>`).join('')+'</div>'+(it.length?'':'<p class="sub">Aucun tarif pour le moment.</p>');
+}
+function add(id){const c=cart();c[id]=(c[id]||0)+1;setCart(c);go('/panier')}
+function rm(id){const c=cart();if(--c[id]<=0)delete c[id];setCart(c)}
+function panier(){
+ const[L,T]=lines();if(!L.length){M.innerHTML='<h1>Panier</h1><p class="sub">Ton panier est vide. <a href="/accueil" style="color:var(--a)">Voir les jeux</a></p>';return}
+ M.innerHTML='<h1>Panier</h1><div class="box"><table>'+L.map(i=>`<tr><td>${e(i.g)} · ${e(i.name)} ×${i.n}</td><td>${ar(pr(i)*i.n)}</td><td><button class="g" onclick="rm('${i.id}')">Retirer</button></td></tr>`).join('')+`</table><p><b>Total : <span class="price">${ar(T)}</span></b></p><a class="btn" href="/paiement">Procéder au paiement</a></div>`;
+}
+function paiement(){
+ const[L,T]=lines();if(!L.length)return go('/panier');
+ M.innerHTML=`<h1>Paiement</h1><form class="box" id="f"><h2 style="margin-top:0">1. Ton compte de jeu</h2><label>ID du joueur</label><input name="gid" required><label>Pseudo en jeu</label><input name="pseudo" required><h2>2. Mode de paiement</h2>`+
+ CAT.pays.map((y,k)=>`<label class="pay"><input type="radio" name="pay" value="${y.id}" ${k?'':'checked'}><img src="${e(y.logo)}" alt=""><b>${e(y.name)}</b></label>`).join('')+
+ `<h2>3. Tes coordonnées</h2><label>Numéro de téléphone</label><input name="phone" type="tel" required><label>Email</label><input name="email" type="email" required><p>Total : <b class="price">${ar(T)}</b></p><button>Suivant</button></form>`;
+ f.onsubmit=x=>{x.preventDefault();co=Object.fromEntries(new FormData(f));etape2(T)};
+}
+function etape2(T){
+ const y=CAT.pays.find(p=>p.id===co.pay);if(!y)return;
+ M.innerHTML=`<h1>Envoie ${ar(T)}</h1><div class="box two"><div><p>Compose le code USSD, ou envoie l'argent manuellement.</p>${y.ussd?`<p><a class="btn" href="tel:${encodeURIComponent(y.ussd)}" target="_self">${e(y.ussd)}</a></p>`:''}<p><img src="${e(y.logo)}" class="thumb" alt=""></p><p>${e(y.name)}<br>Nom : <b>${e(y.receiver)}</b><br>Numéro : <b>${e(y.number)}</b></p></div><form id="g"><label>Message de la transaction</label><textarea name="msg" rows="4" required></textarea><label>Capture d'écran</label><input type="file" name="shot" accept="image/*" required><button id="ok">Envoyer ma commande</button></form></div>`;
+ g.onsubmit=async x=>{x.preventDefault();ok.disabled=true;ok.textContent='Envoi…';
+  try{await api('order',{...co,msg:g.msg.value,shot:await shrink(g.shot.files[0]),cart:cart()});localStorage.cart='{}';go('/historique')}
+  catch(z){alert(z.message);ok.disabled=false;ok.textContent='Envoyer ma commande'}};
+}
+async function historique(){
+ const o=await api('myorders'),L={pending:'En attente',livre:'Livré',refuse:'Refusé'};
+ M.innerHTML='<h1>Historique</h1><div class="box"><table>'+(o.map(x=>`<tr><td>#${x.id.slice(-5)}<br><small>${new Date(x.created).toLocaleString('fr-FR')}</small></td><td>${e(x.items)}<br><small>ID ${e(x.gid)} · ${e(x.pseudo)}</small></td><td>${ar(x.total)}</td><td><span class="st ${x.status}">${L[x.status]||x.status}</span></td></tr>`).join('')||'<tr><td>Aucune commande.</td></tr>')+'</table></div>';
+}
+function blog(id){
+ if(id){const a=CAT.posts.find(p=>p.id===id);if(!a)return go('/blog');
+  M.innerHTML=`<h1>${e(a.title)}</h1>${a.img?`<img src="${e(a.img)}" alt="" style="border-radius:14px">`:''}<div style="max-width:68ch;margin-top:20px;white-space:pre-wrap">${e(a.body)}</div>`;return}
+ M.innerHTML='<h1>Blog</h1><div class="grid">'+CAT.posts.slice().reverse().map(a=>`<a class="card" href="/blog/${a.id}">${a.img?`<img src="${e(a.img)}" alt="">`:''}<div class="t"><b>${e(a.title)}</b></div></a>`).join('')+'</div>';
+}
+async function chats(){
+ const m=await api('chat');
+ M.innerHTML='<h1>Chat avec nous</h1><div class="box">'+m.map(x=>`<div class="msg ${x.admin?'a':''}">${e(x.msg)}</div>`).join('')+'<form id="c" class="row" style="margin-top:14px"><input name="msg" placeholder="Ton message" required style="flex:1;margin:0"><button>Envoyer</button></form><p class="sub"><small>Reviens sur cette page pour lire la réponse.</small></p></div>';
+ c.onsubmit=async x=>{x.preventDefault();await api('say',{msg:c.msg.value});chats()};
+}
+nav();
+</script></body></html>
